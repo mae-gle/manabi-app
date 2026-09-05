@@ -30,7 +30,10 @@ html, body {
 #app {
   max-width: 900px;
   margin: 0 auto;
+  /* iOSの100vhは実際に見えている範囲より大きくなることがあり、
+     ボタンが画面外にはみ出す原因になるため、動的ビューポート単位(dvh)を優先する */
   min-height: 100vh;
+  min-height: 100dvh;
   padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
   display: flex;
   flex-direction: column;
@@ -130,13 +133,23 @@ button { font-family: inherit; }
 }
 .mode-btn.active { background: var(--accent); color: white; }
 
-.char-row { margin-bottom: 18px; }
-.row-label { font-weight: 700; color: var(--muted); margin-bottom: 8px; font-size: 14px; }
-.char-grid {
+.char-list { flex: 1; overflow-y: auto; }
+
+/* 五十音表と同じ並びで表示するグリッド(5列)。画面の横幅を無駄なく使い、
+   スクロールを最小限にするため、行ごとに分割せず一つの表として描画する */
+.gojuon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
 }
+.col-label {
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+  padding-bottom: 2px;
+}
+.char-tile-empty { visibility: hidden; }
 .char-tile {
   aspect-ratio: 1;
   border-radius: 16px;
@@ -150,7 +163,7 @@ button { font-family: inherit; }
   cursor: pointer;
   border: 3px solid transparent;
 }
-.char-tile-char { font-size: 26px; font-weight: 700; }
+.char-tile-char { font-size: clamp(20px, 3.4vw, 30px); font-weight: 700; }
 .char-tile-romaji { font-size: 10px; color: var(--muted); text-transform: uppercase; }
 .char-tile.untried { border-color: var(--line); }
 .char-tile.tried { border-color: var(--gold); }
@@ -164,18 +177,33 @@ button { font-family: inherit; }
 
 .write-stage {
   flex: 1;
+  min-height: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 8px 0 16px;
 }
 .writing-canvas {
-  width: min(88vw, 72vh, 640px);
+  width: min(85vw, 62vh, 620px);
   aspect-ratio: 1;
   border-radius: var(--radius);
   box-shadow: 0 6px 20px rgba(0,0,0,0.12);
   touch-action: none;
 }
+.speak-btn {
+  border: none;
+  background: var(--card);
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 15px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  cursor: pointer;
+}
+.speak-btn:active { transform: scale(0.96); }
 .write-toolbar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -218,8 +246,18 @@ button { font-family: inherit; }
 .score-display { font-size: 48px; font-weight: 800; color: var(--accent-dark); }
 .score-display span { font-size: 18px; margin-left: 4px; }
 .score-sub { color: var(--muted); font-size: 13px; margin: 6px 0 14px; }
-.mistake-list { text-align: left; background: #fff6e9; border-radius: 14px; padding: 12px 16px; margin: 0 0 14px; font-size: 14px; }
-.mistake-list li { margin-bottom: 4px; }
+.mistake-list {
+  text-align: center;
+  list-style: none;
+  background: #fff6e9;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+.mistake-list li { margin-bottom: 6px; }
+.mistake-list li:last-child { margin-bottom: 0; }
+.mistake-list rt { font-size: 0.6em; color: var(--muted); }
 .no-mistake { color: var(--green); font-weight: 700; margin-bottom: 14px; }
 .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 

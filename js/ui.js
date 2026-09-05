@@ -1,6 +1,10 @@
 // 画面テンプレート(HTML文字列)をまとめたモジュール。
 // ロジック(状態管理・イベント配線)は app.js が担当する。
 
+import { ROW_ORDER } from "./data/hiragana.js";
+
+const COL_LABELS = ["あ", "い", "う", "え", "お"];
+
 export function homeScreenHTML(streak) {
   return `
   <header class="topbar">
@@ -36,20 +40,20 @@ export function homeScreenHTML(streak) {
 }
 
 export function listScreenHTML(chars, progressMap, mode) {
-  const rows = {};
-  chars.forEach((c) => {
-    rows[c.row] = rows[c.row] || [];
-    rows[c.row].push(c);
-  });
+  // 五十音表と同じ並び(5列×行)でグリッドを作る。文字が存在しないマスは空セルにする。
+  const byPos = {};
+  chars.forEach((c) => { byPos[`${c.row}_${c.col}`] = c; });
 
-  const rowsHTML = Object.entries(rows).map(([row, items]) => `
-    <div class="char-row">
-      <div class="row-label">${row}行</div>
-      <div class="char-grid">
-        ${items.map((c) => tileHTML(c, progressMap[c.id])).join("")}
-      </div>
-    </div>
-  `).join("");
+  const headerCells = COL_LABELS.map((v) => `<div class="col-label">${v}</div>`).join("");
+
+  const bodyCells = ROW_ORDER.map((row) => {
+    let cells = "";
+    for (let col = 0; col < 5; col++) {
+      const c = byPos[`${row}_${col}`];
+      cells += c ? tileHTML(c, progressMap[c.id]) : `<div class="char-tile-empty"></div>`;
+    }
+    return cells;
+  }).join("");
 
   return `
   <header class="topbar">
@@ -61,7 +65,9 @@ export function listScreenHTML(chars, progressMap, mode) {
     <button class="mode-btn ${mode === "practice" ? "active" : ""}" data-mode="practice">✏️ れんしゅう</button>
     <button class="mode-btn ${mode === "test" ? "active" : ""}" data-mode="test">📝 テスト</button>
   </div>
-  <div class="char-list">${rowsHTML}</div>
+  <div class="char-list">
+    <div class="gojuon-grid">${headerCells}${bodyCells}</div>
+  </div>
   `;
 }
 
@@ -79,11 +85,12 @@ export function writeScreenHTML(charData, mode, index, total) {
   <header class="topbar">
     <button class="icon-btn" data-nav="back" aria-label="もどる">←</button>
     <h1>${mode === "practice" ? "✏️ れんしゅう" : "📝 テスト"}</h1>
-    <button class="icon-btn" data-action="speak" aria-label="よみあげ">🔊</button>
+    <span></span>
   </header>
   ${total > 1 ? `<div class="progress-bar"><div class="progress-fill" style="width:${(index / total) * 100}%"></div></div>` : ""}
   <div class="write-stage">
     <canvas id="writing-canvas" class="writing-canvas"></canvas>
+    <button class="speak-btn" data-action="speak" aria-label="よみあげ">🔊 きいてみる</button>
   </div>
   <div class="write-toolbar">
     <button class="tool-btn" data-action="undo">↩ ひとつもどす</button>
@@ -106,7 +113,7 @@ export function resultOverlayHTML(result, charData, mode) {
 
   const mistakesHTML = result.mistakes.length === 0
     ? `<p class="no-mistake">まちがいなし！</p>`
-    : `<ul class="mistake-list">${result.mistakes.map((m) => `<li>${m.message}</li>`).join("")}</ul>`;
+    : `<ul class="mistake-list">${result.mistakes.map((m) => `<li>✏️ ${m.message}</li>`).join("")}</ul>`;
 
   return `
   <div class="result-overlay ${result.praiseLevel}">

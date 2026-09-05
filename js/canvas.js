@@ -169,11 +169,12 @@ export class WritingCanvas {
     this._demoDoneStrokes = [];
 
     for (const stroke of this.charData.strokes) {
-      const steps = 24;
+      const smoothPath = chaikinSmooth(stroke, 4); // カクカクした折れ線を滑らかな曲線に変換
+      const steps = 32;
       const animated = [];
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const pt = interpolatePolyline(stroke, t);
+        const pt = interpolatePolyline(smoothPath, t);
         animated.push({ x: pt.x, y: pt.y, pressure: 0.6 });
         this.userStrokes = [...this._demoDoneStrokes, animated];
         this.render();
@@ -188,6 +189,25 @@ export class WritingCanvas {
     this.isDemoPlaying = false;
     this.render();
   }
+}
+
+// Chaikinのコーナーカット法で折れ線の角を丸める。
+// 端点(始点・終点)は動かさないので、書き順判定に使う始点・終点はそのまま保たれる。
+export function chaikinSmooth(points, iterations = 3) {
+  if (points.length < 3) return points;
+  let pts = points.map((p) => [...p]);
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i];
+      const [x1, y1] = pts[i + 1];
+      next.push([x0 + (x1 - x0) * 0.25, y0 + (y1 - y0) * 0.25]);
+      next.push([x0 + (x1 - x0) * 0.75, y0 + (y1 - y0) * 0.75]);
+    }
+    next.push(pts[pts.length - 1]);
+    pts = next;
+  }
+  return pts;
 }
 
 function interpolatePolyline(points, t) {

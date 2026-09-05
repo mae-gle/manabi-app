@@ -129,10 +129,10 @@ function strokeOrderCheck(expectedStrokes, userStrokes) {
 
   if (userStrokes.length < expectedStrokes.length) {
     mistakes.push({ type: "missing", strokeOrder: userStrokes.length + 1,
-      message: `${userStrokes.length + 1}画目が足りないよ` });
+      message: `${kakume(userStrokes.length + 1)}が たりないよ` });
   } else if (userStrokes.length > expectedStrokes.length) {
     mistakes.push({ type: "extra", strokeOrder: expectedStrokes.length + 1,
-      message: "画数が多いよ" });
+      message: "かくすうが おおいよ" });
   }
 
   const matchCount = Math.min(expectedStrokes.length, userStrokes.length);
@@ -152,13 +152,18 @@ function strokeOrderCheck(expectedStrokes, userStrokes) {
       continue; // この画はOK
     } else if (reversedOk) {
       mistakes.push({ type: "direction", strokeOrder: i + 1,
-        message: `${i + 1}画目は逆向きに書いているかも` });
+        message: `${kakume(i + 1)}は ぎゃくむきかもしれないよ` });
     } else {
       mistakes.push({ type: "order", strokeOrder: i + 1,
-        message: `${i + 1}画目の書きはじめの場所を確認しよう` });
+        message: `${kakume(i + 1)}の かきはじめのばしょを たしかめよう` });
     }
   }
   return mistakes;
+}
+
+// 「1画目」を1年生でも読めるようふりがな付きで表示する
+function kakume(n) {
+  return `${n}<ruby>画目<rt>かくめ</rt></ruby>`;
 }
 
 /**
@@ -178,7 +183,7 @@ export function judge(charData, userStrokes, mode = "practice") {
   const total = Math.round(orderScore * weights.order + shape * weights.shape);
 
   if (shape < 55 && !orderMistakes.some((m) => m.type === "shape")) {
-    orderMistakes.push({ type: "shape", strokeOrder: null, message: "形をもう少しなぞってみよう" });
+    orderMistakes.push({ type: "shape", strokeOrder: null, message: "かたちを もうすこし なぞってみよう" });
   }
 
   let praiseLevel;

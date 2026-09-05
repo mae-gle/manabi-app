@@ -2,170 +2,174 @@
 // 座標系: 0-100 の正規化グリッド（x: 左→右, y: 上→下）
 // strokes: 画ごとのキーポイント配列。なぞりの見本アニメーションと
 //          「書き順・向き」の判定に使う（形の正誤は実際の文字フォントとの
-//          重なり判定で行うため、ここでは大まかな座標でよい）
+//          重なり判定で行うため、ここでは大まかな座標でよい。ただし
+//          お手本アニメーションの見た目に直結するため、丸みのある画は
+//          カクカクして見えないよう点数を多めにとっている）
+// row/col: 五十音表での位置（あ行=0段目, い段=1列目 …）。一覧画面を
+//          実際の五十音表と同じ並びで表示するために使う。
 //
 // 将来、カタカナ・漢字・英語を同じ形式で追加していくことで
 // 学年拡張（必須条件5）に対応する。
 
 export const HIRAGANA_DATA = [
-  { id: "hiragana_a", char: "あ", romaji: "a", row: "あ",
+  { id: "hiragana_a", char: "あ", romaji: "a", row: "あ", col: 0,
     strokes: [
       [[18,32],[52,28]],
       [[48,18],[46,42],[28,68],[20,82]],
-      [[58,50],[76,58],[70,80],[45,84]]
+      [[58,50],[78,58],[76,76],[56,88],[42,80]]
     ]},
-  { id: "hiragana_i", char: "い", romaji: "i", row: "あ",
+  { id: "hiragana_i", char: "い", romaji: "i", row: "あ", col: 1,
     strokes: [
       [[30,25],[22,55],[28,80]],
       [[55,20],[62,50],[78,85]]
     ]},
-  { id: "hiragana_u", char: "う", romaji: "u", row: "あ",
+  { id: "hiragana_u", char: "う", romaji: "u", row: "あ", col: 2,
     strokes: [
       [[30,20],[45,15]],
       [[25,35],[30,55],[55,75],[75,60],[78,40]]
     ]},
-  { id: "hiragana_e", char: "え", romaji: "e", row: "あ",
+  { id: "hiragana_e", char: "え", romaji: "e", row: "あ", col: 3,
     strokes: [
       [[20,30],[70,28]],
       [[25,45],[70,45],[75,65],[35,82]]
     ]},
-  { id: "hiragana_o", char: "お", romaji: "o", row: "あ",
+  { id: "hiragana_o", char: "お", romaji: "o", row: "あ", col: 4,
     strokes: [
       [[18,35],[55,32]],
       [[35,18],[33,45],[20,72],[30,85]],
       [[62,25],[72,35]]
     ]},
 
-  { id: "hiragana_ka", char: "か", romaji: "ka", row: "か",
+  { id: "hiragana_ka", char: "か", romaji: "ka", row: "か", col: 0,
     strokes: [
       [[25,20],[22,75]],
       [[15,45],[70,40]],
       [[60,50],[78,58],[70,78]]
     ]},
-  { id: "hiragana_ki", char: "き", romaji: "ki", row: "か",
+  { id: "hiragana_ki", char: "き", romaji: "ki", row: "か", col: 1,
     strokes: [
       [[20,30],[70,28]],
       [[18,50],[68,48]],
-      [[40,15],[42,60],[25,82],[55,88]]
+      [[40,15],[42,45],[38,68],[22,84],[52,90]]
     ]},
-  { id: "hiragana_ku", char: "く", romaji: "ku", row: "か",
+  { id: "hiragana_ku", char: "く", romaji: "ku", row: "か", col: 2,
     strokes: [
       [[65,20],[30,50],[65,85]]
     ]},
-  { id: "hiragana_ke", char: "け", romaji: "ke", row: "か",
+  { id: "hiragana_ke", char: "け", romaji: "ke", row: "か", col: 3,
     strokes: [
       [[22,20],[20,80]],
       [[35,35],[75,32]],
       [[60,20],[58,60],[45,82]]
     ]},
-  { id: "hiragana_ko", char: "こ", romaji: "ko", row: "か",
+  { id: "hiragana_ko", char: "こ", romaji: "ko", row: "か", col: 4,
     strokes: [
       [[20,30],[65,28]],
       [[15,75],[70,60],[80,80]]
     ]},
 
-  { id: "hiragana_sa", char: "さ", romaji: "sa", row: "さ",
+  { id: "hiragana_sa", char: "さ", romaji: "sa", row: "さ", col: 0,
     strokes: [
       [[25,25],[65,22]],
       [[20,45],[72,42]],
       [[55,20],[48,60],[30,82],[60,88]]
     ]},
-  { id: "hiragana_shi", char: "し", romaji: "shi", row: "さ",
+  { id: "hiragana_shi", char: "し", romaji: "shi", row: "さ", col: 1,
     strokes: [
       [[55,20],[40,55],[35,78],[50,88]]
     ]},
-  { id: "hiragana_su", char: "す", romaji: "su", row: "さ",
+  { id: "hiragana_su", char: "す", romaji: "su", row: "さ", col: 2,
     strokes: [
       [[25,25],[60,22]],
-      [[45,20],[48,55],[25,78],[55,90]]
+      [[45,20],[48,50],[30,72],[24,86],[52,92]]
     ]},
-  { id: "hiragana_se", char: "せ", romaji: "se", row: "さ",
+  { id: "hiragana_se", char: "せ", romaji: "se", row: "さ", col: 3,
     strokes: [
       [[20,40],[70,38]],
-      [[45,15],[43,50],[25,75],[50,88]],
+      [[45,15],[43,48],[30,70],[22,84],[48,90]],
       [[58,25],[75,30]]
     ]},
-  { id: "hiragana_so", char: "そ", romaji: "so", row: "さ",
+  { id: "hiragana_so", char: "そ", romaji: "so", row: "さ", col: 4,
     strokes: [
       [[20,22],[62,25],[28,55],[78,70],[45,90]]
     ]},
 
-  { id: "hiragana_ta", char: "た", romaji: "ta", row: "た",
+  { id: "hiragana_ta", char: "た", romaji: "ta", row: "た", col: 0,
     strokes: [
       [[25,20],[22,50]],
       [[15,40],[70,38]],
       [[55,20],[52,55],[35,80],[60,88]],
       [[60,55],[78,62]]
     ]},
-  { id: "hiragana_chi", char: "ち", romaji: "chi", row: "た",
+  { id: "hiragana_chi", char: "ち", romaji: "chi", row: "た", col: 1,
     strokes: [
       [[25,25],[65,22]],
-      [[45,20],[38,55],[22,78],[55,90]]
+      [[45,20],[40,50],[26,72],[20,85],[50,90]]
     ]},
-  { id: "hiragana_tsu", char: "つ", romaji: "tsu", row: "た",
+  { id: "hiragana_tsu", char: "つ", romaji: "tsu", row: "た", col: 2,
     strokes: [
       [[72,30],[30,25],[18,50],[35,80],[70,72]]
     ]},
-  { id: "hiragana_te", char: "て", romaji: "te", row: "た",
+  { id: "hiragana_te", char: "て", romaji: "te", row: "た", col: 3,
     strokes: [
       [[20,30],[72,28],[55,50],[30,78],[50,88]]
     ]},
-  { id: "hiragana_to", char: "と", romaji: "to", row: "た",
+  { id: "hiragana_to", char: "と", romaji: "to", row: "た", col: 4,
     strokes: [
       [[30,18],[25,70]],
       [[35,55],[65,58],[72,78]]
     ]},
 
-  { id: "hiragana_na", char: "な", romaji: "na", row: "な",
+  { id: "hiragana_na", char: "な", romaji: "na", row: "な", col: 0,
     strokes: [
       [[22,20],[20,55]],
       [[15,42],[55,40]],
       [[60,18],[58,55],[40,80],[65,90]],
-      [[65,58],[80,68],[70,85]]
+      [[65,58],[82,66],[78,82],[62,84]]
     ]},
-  { id: "hiragana_ni", char: "に", romaji: "ni", row: "な",
+  { id: "hiragana_ni", char: "に", romaji: "ni", row: "な", col: 1,
     strokes: [
       [[25,20],[22,75]],
       [[40,35],[75,32]],
       [[35,60],[78,58],[85,75]]
     ]},
-  { id: "hiragana_nu", char: "ぬ", romaji: "nu", row: "な",
+  { id: "hiragana_nu", char: "ぬ", romaji: "nu", row: "な", col: 2,
     strokes: [
       [[25,20],[22,60],[35,80]],
-      [[35,30],[75,35],[60,75],[30,60]]
+      [[38,32],[74,30],[82,55],[60,80],[30,68],[42,45]]
     ]},
-  { id: "hiragana_ne", char: "ね", romaji: "ne", row: "な",
+  { id: "hiragana_ne", char: "ね", romaji: "ne", row: "な", col: 3,
     strokes: [
       [[25,18],[22,60],[38,82]],
-      [[38,30],[78,32],[58,78],[35,65]]
+      [[40,30],[76,28],[85,52],[62,80],[30,70],[45,48]]
     ]},
-  { id: "hiragana_no", char: "の", romaji: "no", row: "な",
+  { id: "hiragana_no", char: "の", romaji: "no", row: "な", col: 4,
     strokes: [
-      [[50,25],[22,45],[35,80],[75,60],[50,30]]
+      [[50,25],[24,38],[20,62],[42,84],[76,68],[72,40],[50,28]]
     ]},
 
-  { id: "hiragana_ha", char: "は", romaji: "ha", row: "は",
+  { id: "hiragana_ha", char: "は", romaji: "ha", row: "は", col: 0,
     strokes: [
       [[22,20],[20,80]],
       [[35,42],[70,40]],
       [[58,20],[52,60],[38,84],[65,90]]
     ]},
-  { id: "hiragana_hi", char: "ひ", romaji: "hi", row: "は",
+  { id: "hiragana_hi", char: "ひ", romaji: "hi", row: "は", col: 1,
     strokes: [
-      [[35,25],[65,25],[55,60],[30,78]]
+      [[35,25],[65,23],[68,45],[45,68],[25,72],[38,60]]
     ]},
-  { id: "hiragana_fu", char: "ふ", romaji: "fu", row: "は",
+  { id: "hiragana_fu", char: "ふ", romaji: "fu", row: "は", col: 2,
     strokes: [
       [[25,22],[55,18]],
       [[35,35],[65,32]],
       [[20,48],[60,45]],
-      [[55,25],[35,55],[25,80],[60,88]]
+      [[55,25],[38,48],[22,72],[35,88],[62,82]]
     ]},
-  { id: "hiragana_he", char: "へ", romaji: "he", row: "は",
+  { id: "hiragana_he", char: "へ", romaji: "he", row: "は", col: 3,
     strokes: [
       [[18,45],[50,20],[82,55]]
     ]},
-  { id: "hiragana_ho", char: "ほ", romaji: "ho", row: "は",
+  { id: "hiragana_ho", char: "ほ", romaji: "ho", row: "は", col: 4,
     strokes: [
       [[22,18],[20,80]],
       [[35,40],[75,38]],
@@ -173,91 +177,91 @@ export const HIRAGANA_DATA = [
       [[65,58],[80,68]]
     ]},
 
-  { id: "hiragana_ma", char: "ま", romaji: "ma", row: "ま",
+  { id: "hiragana_ma", char: "ま", romaji: "ma", row: "ま", col: 0,
     strokes: [
       [[20,30],[70,28]],
       [[18,48],[65,46]],
       [[45,20],[40,60],[28,85],[58,90]]
     ]},
-  { id: "hiragana_mi", char: "み", romaji: "mi", row: "ま",
+  { id: "hiragana_mi", char: "み", romaji: "mi", row: "ま", col: 1,
     strokes: [
       [[25,20],[22,55],[38,78]],
-      [[38,32],[75,35],[58,78],[32,65]]
+      [[40,32],[76,30],[84,55],[60,80],[28,68],[42,46]]
     ]},
-  { id: "hiragana_mu", char: "む", romaji: "mu", row: "ま",
+  { id: "hiragana_mu", char: "む", romaji: "mu", row: "ま", col: 2,
     strokes: [
       [[22,25],[58,20],[65,45],[35,70]],
       [[35,55],[72,50]],
-      [[55,55],[60,80],[40,88]]
+      [[55,55],[65,68],[58,85],[40,86]]
     ]},
-  { id: "hiragana_me", char: "め", romaji: "me", row: "ま",
+  { id: "hiragana_me", char: "め", romaji: "me", row: "ま", col: 3,
     strokes: [
       [[25,20],[20,55],[35,78]],
-      [[38,28],[78,32],[55,80],[25,60]]
+      [[40,28],[78,30],[85,55],[58,82],[26,66],[40,44]]
     ]},
-  { id: "hiragana_mo", char: "も", romaji: "mo", row: "ま",
+  { id: "hiragana_mo", char: "も", romaji: "mo", row: "ま", col: 4,
     strokes: [
       [[48,15],[45,55],[30,80],[55,88]],
       [[20,40],[72,38]]
     ]},
 
-  { id: "hiragana_ya", char: "や", romaji: "ya", row: "や",
+  { id: "hiragana_ya", char: "や", romaji: "ya", row: "や", col: 0,
     strokes: [
       [[20,35],[60,20]],
       [[40,42],[38,75],[65,90]],
       [[65,18],[70,32]]
     ]},
-  { id: "hiragana_yu", char: "ゆ", romaji: "yu", row: "や",
+  { id: "hiragana_yu", char: "ゆ", romaji: "yu", row: "や", col: 2,
     strokes: [
       [[35,18],[30,55],[45,78]],
-      [[28,38],[75,40],[52,82],[28,65]]
+      [[30,38],[74,36],[82,60],[55,84],[24,70],[38,48]]
     ]},
-  { id: "hiragana_yo", char: "よ", romaji: "yo", row: "や",
+  { id: "hiragana_yo", char: "よ", romaji: "yo", row: "や", col: 4,
     strokes: [
       [[48,15],[42,55]],
       [[22,48],[70,45],[50,88]]
     ]},
 
-  { id: "hiragana_ra", char: "ら", romaji: "ra", row: "ら",
+  { id: "hiragana_ra", char: "ら", romaji: "ra", row: "ら", col: 0,
     strokes: [
       [[25,20],[45,18],[30,45]],
-      [[35,42],[75,45],[50,85],[28,65]]
+      [[36,42],[76,44],[84,66],[56,88],[26,74],[38,52]]
     ]},
-  { id: "hiragana_ri", char: "り", romaji: "ri", row: "ら",
+  { id: "hiragana_ri", char: "り", romaji: "ri", row: "ら", col: 1,
     strokes: [
       [[30,20],[25,65]],
       [[55,35],[50,70],[65,85]]
     ]},
-  { id: "hiragana_ru", char: "る", romaji: "ru", row: "ら",
+  { id: "hiragana_ru", char: "る", romaji: "ru", row: "ら", col: 2,
     strokes: [
-      [[32,20],[72,25],[30,58],[55,90]]
+      [[32,20],[74,24],[38,55],[20,72],[45,92],[68,78],[50,62]]
     ]},
-  { id: "hiragana_re", char: "れ", romaji: "re", row: "ら",
+  { id: "hiragana_re", char: "れ", romaji: "re", row: "ら", col: 3,
     strokes: [
       [[25,20],[20,75]],
       [[48,30],[78,45],[50,85]]
     ]},
-  { id: "hiragana_ro", char: "ろ", romaji: "ro", row: "ら",
+  { id: "hiragana_ro", char: "ろ", romaji: "ro", row: "ら", col: 4,
     strokes: [
-      [[28,25],[70,28],[30,60],[58,88]]
+      [[28,25],[70,28],[35,58],[25,78],[55,92],[68,74]]
     ]},
 
-  { id: "hiragana_wa", char: "わ", romaji: "wa", row: "わ",
+  { id: "hiragana_wa", char: "わ", romaji: "wa", row: "わ", col: 0,
     strokes: [
       [[22,20],[45,18],[30,50]],
-      [[35,45],[78,48],[52,88],[28,68]]
+      [[36,45],[78,47],[86,68],[56,90],[26,76],[40,55]]
     ]},
-  { id: "hiragana_wo", char: "を", romaji: "wo", row: "わ",
+  { id: "hiragana_wo", char: "を", romaji: "wo", row: "わ", col: 4,
     strokes: [
       [[20,25],[55,22]],
       [[18,45],[70,42]],
-      [[45,25],[35,60],[25,85],[60,90]]
+      [[45,25],[38,52],[24,75],[22,88],[54,92]]
     ]},
-  { id: "hiragana_n", char: "ん", romaji: "n", row: "わ",
+  { id: "hiragana_n", char: "ん", romaji: "n", row: "ん", col: 0,
     strokes: [
       [[25,25],[22,55],[45,45],[70,55],[75,80]]
     ]}
 ];
 
-// 行（グループ）の表示順
-export const ROW_ORDER = ["あ","か","さ","た","な","は","ま","や","ら","わ"];
+// 五十音表の行の表示順（一覧画面をこの順で並べる）
+export const ROW_ORDER = ["あ","か","さ","た","な","は","ま","や","ら","わ","ん"];

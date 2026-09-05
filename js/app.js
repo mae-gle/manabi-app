@@ -1,6 +1,6 @@
 import { HIRAGANA_DATA } from "./data/hiragana.js";
 import { judge } from "./judge.js";
-import { WritingCanvas } from "./canvas.js";
+import { WritingCanvas, chaikinSmooth } from "./canvas.js";
 import { loadProgress, recordResult, getReviewQueue, exportBackup, importBackup } from "./storage.js";
 import { homeScreenHTML, listScreenHTML, writeScreenHTML, resultOverlayHTML, myPageHTML } from "./ui.js";
 import { loadStreak } from "./storage.js";
@@ -233,8 +233,26 @@ function debugAutoSubmit(id, quality) {
   });
 }
 
+// お手本アニメーションの滑らか化の見た目確認用(#preview=文字ID)。通常利用では使わない。
+function debugPreviewSmoothed(id) {
+  const charData = charById(id);
+  if (!charData) return;
+  startQueue([id], "practice");
+  requestAnimationFrame(() => {
+    const strokes = charData.strokes.map((s) =>
+      chaikinSmooth(s, 4).map(([x, y]) => ({ x, y, pressure: 0.6 }))
+    );
+    state.writingCanvas.userStrokes = strokes;
+    state.writingCanvas.render();
+  });
+}
+
 function bootFromHashOrTest() {
   const hash = location.hash.replace("#", "");
+  if (hash.startsWith("preview=")) {
+    debugPreviewSmoothed(hash.replace("preview=", ""));
+    return true;
+  }
   if (hash.startsWith("test=")) {
     const [id, quality] = hash.replace("test=", "").split(":");
     debugAutoSubmit(id, quality);
