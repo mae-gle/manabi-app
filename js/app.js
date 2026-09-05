@@ -2,9 +2,11 @@ import { HIRAGANA_DATA } from "./data/hiragana.js";
 import { judge } from "./judge.js";
 import { WritingCanvas } from "./canvas.js";
 import { pointAt } from "./strokePaths.js";
-import { loadProgress, recordResult, getReviewQueue, exportBackup, importBackup } from "./storage.js";
+import {
+  loadProgress, loadStats, recordResult, getReviewQueue, getWeakChars,
+  getTodayStatus, exportBackup, importBackup, STICKERS, WEAK_SCORE_THRESHOLD
+} from "./storage.js";
 import { homeScreenHTML, listScreenHTML, writeScreenHTML, resultOverlayHTML, myPageHTML } from "./ui.js";
-import { loadStreak } from "./storage.js";
 
 const root = document.getElementById("app");
 
@@ -24,7 +26,7 @@ function charById(id) {
 
 function goHome() {
   state.lastScreen = "home";
-  root.innerHTML = homeScreenHTML(loadStreak());
+  root.innerHTML = homeScreenHTML(getTodayStatus());
   wireHome();
 }
 
@@ -37,10 +39,8 @@ function goList() {
 
 function goMyPage() {
   state.lastScreen = "mypage";
-  const streak = loadStreak();
-  const progress = loadProgress();
-  const weak = getReviewQueue(HIRAGANA_DATA).slice(0, 8).filter((c) => progress[c.id]);
-  root.innerHTML = myPageHTML(streak, weak);
+  const weak = getWeakChars(HIRAGANA_DATA).slice(0, 12);
+  root.innerHTML = myPageHTML(loadStats(), weak, STICKERS, WEAK_SCORE_THRESHOLD);
   wireMyPage();
 }
 
@@ -103,13 +103,13 @@ function onSubmit(charData) {
   const strokes = state.writingCanvas.getStrokes();
   if (strokes.length === 0) return;
   const result = judge(charData, strokes, state.mode);
-  recordResult(charData.id, state.mode, result);
-  showResult(result, charData);
+  const { newSticker } = recordResult(charData.id, state.mode, result);
+  showResult(result, charData, newSticker);
 }
 
-function showResult(result, charData) {
+function showResult(result, charData, newSticker) {
   const overlay = document.createElement("div");
-  overlay.innerHTML = resultOverlayHTML(result, charData, state.mode);
+  overlay.innerHTML = resultOverlayHTML(result, charData, state.mode, newSticker);
   const node = overlay.firstElementChild;
   document.body.appendChild(node);
 

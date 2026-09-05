@@ -2,7 +2,7 @@
 // アプリを更新した際は CACHE_VERSION の数字を上げてください
 // (上げないと端末に古いキャッシュが残ってしまいます)
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `manabi-app-${CACHE_VERSION}`;
 
 const APP_SHELL = [

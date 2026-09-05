@@ -9,6 +9,10 @@
 import { KVG_SIZE } from "./data/hiragana.js";
 import { path2d, pathLength, pointAt } from "./strokePaths.js";
 
+// お手本の線・なぞりアニメーション・自分で書く線は、すべて同じ太さにそろえる
+// (なぞる場所と書いた線の太さが違うと、ずれているように見えてしまうため)
+const LINE_WIDTH_RATIO = 0.085;
+
 export class WritingCanvas {
   constructor(canvasEl, { showGuide = true } = {}) {
     this.canvas = canvasEl;
@@ -116,6 +120,46 @@ export class WritingCanvas {
     ctx.restore();
   }
 
+  // 書き順番号は、書きはじめの点を隠さないよう「線が来る向きの反対側」にずらして置く。
+  // 書きはじめの位置そのものは小さな点で示す。
+  _drawStrokeNumber(d, index) {
+    const ctx = this.ctx;
+    const s = this.size;
+    const start = pointAt(d, 0);
+    const ahead = pointAt(d, 0.15);
+
+    let dx = ahead.x - start.x;
+    let dy = ahead.y - start.y;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+
+    const offset = 9; // 0-100座標での距離
+    const bx = Math.min(Math.max(start.x - dx * offset, 7), 93);
+    const by = Math.min(Math.max(start.y - dy * offset, 7), 93);
+
+    const done = index < this.userStrokes.length;
+    const badge = this._px({ x: bx, y: by });
+    const dot = this._px(start);
+
+    // 書きはじめの点
+    ctx.beginPath();
+    ctx.arc(dot.x, dot.y, s * 0.014, 0, Math.PI * 2);
+    ctx.fillStyle = done ? "#8cba86" : "#e8823a";
+    ctx.fill();
+
+    // 番号
+    ctx.beginPath();
+    ctx.arc(badge.x, badge.y, s * 0.037, 0, Math.PI * 2);
+    ctx.fillStyle = done ? "#c9e4c5" : "#ffb35c";
+    ctx.fill();
+    ctx.fillStyle = "#5a4a2f";
+    ctx.font = `bold ${s * 0.042}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(index + 1), badge.x, badge.y);
+  }
+
   render() {
     const ctx = this.ctx;
     const s = this.size;
@@ -142,7 +186,7 @@ export class WritingCanvas {
     if (this.charData && this.showGuide) {
       // 薄いお手本(なぞる線)
       paths.forEach((d) => {
-        this._strokeRefPath(d, { color: "#e7dcc6", width: s * 0.085 });
+        this._strokeRefPath(d, { color: "#e7dcc6", width: s * LINE_WIDTH_RATIO });
       });
     }
 
@@ -151,28 +195,16 @@ export class WritingCanvas {
       const { doneCount, progress } = this.demoState;
       paths.forEach((d, i) => {
         if (i < doneCount) {
-          this._strokeRefPath(d, { color: "#ffb35c", width: s * 0.075 });
+          this._strokeRefPath(d, { color: "#ffb35c", width: s * LINE_WIDTH_RATIO });
         } else if (i === doneCount && progress > 0) {
-          this._strokeRefPath(d, { color: "#ff9f5a", width: s * 0.075, progress });
+          this._strokeRefPath(d, { color: "#ff9f5a", width: s * LINE_WIDTH_RATIO, progress });
         }
       });
     }
 
-    // 書き順番号(各画の書きはじめ)
+    // 書き順番号
     if (this.charData && this.showGuide) {
-      paths.forEach((d, i) => {
-        const done = i < this.userStrokes.length;
-        const p = this._px(pointAt(d, 0));
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, s * 0.045, 0, Math.PI * 2);
-        ctx.fillStyle = done ? "#c9e4c5" : "#ffb35c";
-        ctx.fill();
-        ctx.fillStyle = "#5a4a2f";
-        ctx.font = `bold ${s * 0.05}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(String(i + 1), p.x, p.y);
-      });
+      paths.forEach((d, i) => this._drawStrokeNumber(d, i));
     }
 
     // ユーザーの筆跡
@@ -192,8 +224,9 @@ export class WritingCanvas {
     ctx.moveTo(p0.x, p0.y);
     for (let i = 1; i < stroke.length; i++) {
       const p = this._px(stroke[i]);
+      // 筆圧で多少の強弱はつけつつ、標準の筆圧(0.5)でお手本と同じ太さになるようにする
       const pressure = stroke[i].pressure ?? 0.5;
-      ctx.lineWidth = this.size * (0.03 + pressure * 0.035);
+      ctx.lineWidth = this.size * LINE_WIDTH_RATIO * (0.75 + pressure * 0.5);
       ctx.lineTo(p.x, p.y);
       ctx.stroke();
       ctx.beginPath();

@@ -5,14 +5,24 @@ import { ROW_ORDER } from "./data/hiragana.js";
 
 const COL_LABELS = ["あ", "い", "う", "え", "お"];
 
-export function homeScreenHTML(streak) {
+export function homeScreenHTML(today) {
+  // 「あと何文字で今日の目標か」を、数を数えられる1年生にも分かる丸で表示する
+  const dots = Array.from({ length: today.goal }, (_, i) =>
+    `<span class="goal-dot ${i < today.count ? "filled" : ""}">${i < today.count ? "⭐" : ""}</span>`
+  ).join("");
+
   return `
   <header class="topbar">
     <h1>まなびアプリ</h1>
     <button class="icon-btn" data-nav="mypage" aria-label="マイページ">🏅</button>
   </header>
   <section class="hero">
-    <div class="streak-pill">🔥 ${streak.currentStreak}にち れんぞく</div>
+    <div class="goal-card ${today.achieved ? "achieved" : ""}">
+      <div class="goal-title">${today.achieved
+        ? "きょうの もくひょう たっせい！ すごい！"
+        : `きょうは あと ${today.goal - today.count}もじ`}</div>
+      <div class="goal-dots">${dots}</div>
+    </div>
   </section>
   <section class="subject-grid">
     <button class="subject-card active" data-subject="hiragana">
@@ -65,6 +75,12 @@ export function listScreenHTML(chars, progressMap, mode) {
     <button class="mode-btn ${mode === "practice" ? "active" : ""}" data-mode="practice">✏️ れんしゅう</button>
     <button class="mode-btn ${mode === "test" ? "active" : ""}" data-mode="test">📝 テスト</button>
   </div>
+  <div class="legend">
+    <span class="legend-item"><i class="swatch untried"></i>まだ</span>
+    <span class="legend-item"><i class="swatch tried"></i>れんしゅうした</span>
+    <span class="legend-item"><i class="swatch passed"></i>テストごうかく</span>
+    <span class="legend-item"><i class="swatch mastered"></i>おぼえた</span>
+  </div>
   <div class="char-list">
     <div class="gojuon-grid">${headerCells}${bodyCells}</div>
   </div>
@@ -101,7 +117,7 @@ export function writeScreenHTML(charData, mode, index, total) {
   `;
 }
 
-export function resultOverlayHTML(result, charData, mode) {
+export function resultOverlayHTML(result, charData, mode, newSticker) {
   const praiseText = {
     perfect: "パーフェクト！すごいね！",
     good: "じょうずにかけたね！",
@@ -122,6 +138,10 @@ export function resultOverlayHTML(result, charData, mode) {
       <h2>${praiseText}</h2>
       <div class="score-display">${result.total}<span>てん</span></div>
       <div class="score-sub">かたち ${result.shapeScore}点 ・ じゅんばん ${result.orderScore}点</div>
+      ${newSticker ? `<div class="sticker-reward">
+        <div class="sticker-reward-emoji">${newSticker}</div>
+        <div class="sticker-reward-text">あたらしい シールを ゲット！</div>
+      </div>` : ""}
       ${mistakesHTML}
       <div class="result-actions">
         <button class="tool-btn" data-action="retry">🔁 もういちど</button>
@@ -133,10 +153,18 @@ export function resultOverlayHTML(result, charData, mode) {
   `;
 }
 
-export function myPageHTML(streak, weakChars) {
+export function myPageHTML(stats, weakChars, allStickers, weakThreshold) {
+  const owned = new Set(stats.stickers);
+  const stickerHTML = allStickers
+    .map((s) => owned.has(s)
+      ? `<span class="sticker got">${s}</span>`
+      : `<span class="sticker">?</span>`)
+    .join("");
+
   const weakHTML = weakChars.length
-    ? weakChars.map((c) => `<span class="weak-chip">${c.char}</span>`).join("")
-    : `<p class="muted">にがてな文字はまだないよ</p>`;
+    ? weakChars.map(({ char, avg }) =>
+        `<span class="weak-chip">${char.char}<i>${avg}てん</i></span>`).join("")
+    : `<p class="muted">にがてな文字はまだないよ。この調子！</p>`;
 
   return `
   <header class="topbar">
@@ -144,14 +172,23 @@ export function myPageHTML(streak, weakChars) {
     <h1>マイページ</h1>
     <span></span>
   </header>
-  <section class="mypage-stats">
-    <div class="stat-box"><div class="stat-num">${streak.currentStreak}</div><div class="stat-label">れんぞく日数</div></div>
-    <div class="stat-box"><div class="stat-num">${streak.longestStreak}</div><div class="stat-label">さいちょう記録</div></div>
-    <div class="stat-box"><div class="stat-num">⭐${streak.stamps}</div><div class="stat-label">シール</div></div>
+  <section class="mypage-section">
+    <h3>シールずかん <span class="count-badge">${owned.size} / ${allStickers.length}</span></h3>
+    <p class="muted">「じょうず」いじょうで かけたら、あたらしいシールが 1まい もらえるよ</p>
+    <div class="sticker-book">${stickerHTML}</div>
   </section>
   <section class="mypage-section">
     <h3>にがてな文字</h3>
+    <p class="muted">さいきん3かいの へいきんが ${weakThreshold}てん より ひくい文字です</p>
     <div class="weak-chips">${weakHTML}</div>
+  </section>
+  <section class="mypage-section">
+    <h3>おうちの方へ</h3>
+    <div class="mypage-stats">
+      <div class="stat-box"><div class="stat-num">${stats.currentStreak}</div><div class="stat-label">連続日数</div></div>
+      <div class="stat-box"><div class="stat-num">${stats.longestStreak}</div><div class="stat-label">最長記録</div></div>
+      <div class="stat-box"><div class="stat-num">${stats.historyDates.length}</div><div class="stat-label">学習した日数</div></div>
+    </div>
   </section>
   <section class="mypage-section">
     <h3>バックアップ</h3>
