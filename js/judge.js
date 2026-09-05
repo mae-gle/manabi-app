@@ -2,71 +2,78 @@
 // ユーザーが描いたストローク(座標配列)を、お手本データと比較して
 // 「書き順・向きが合っているか」「形が正しく書けているか」を採点する。
 //
-// 形の正誤チェックは、端末が実際に描画する日本語フォントのグリフを
-// 基準マスクとして使うことで、手作業で厳密な形状データを作らなくても
-// 精度の高い判定ができるようにしている。
+// 形の判定は、画面に薄く表示しているお手本と同じ線データ(KanjiVG由来のSVGパス)を
+// 基準マスクとして使う。見えているお手本＝採点の基準なので、
+// 「ちゃんとなぞったのに減点される」ということが起きない。
+
+import { KVG_SIZE } from "./data/hiragana.js";
+import { path2d, startEndOf, pointAt } from "./strokePaths.js";
 
 const GRID = 100; // 正規化座標の一辺
 const RASTER_SIZE = 160; // 形状比較用オフスクリーンキャンバスの解像度(px)
-const DILATE_PASSES = 3; // お手本マスクを太らせる回数(許容範囲の広さ)
-const STROKE_WIDTH_RATIO = 0.09; // 描画線の太さ(RASTER_SIZEに対する比率)
+const DILATE_PASSES = 4; // お手本マスクを太らせる回数(許容範囲の広さ)
+const STROKE_WIDTH_RATIO = 0.085; // 描画線の太さ(RASTER_SIZEに対する比率)
+const TOLERANCE = 26; // 書きはじめ・書きおわりの位置の許容距離(0-100グリッド上)
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// 正規化座標(0-100)をラスターcanvasのpxに変換
+// --- 位置・大きさのずれの補正 -------------------------------------------
+// テストモードではお手本が出ないため、書いた文字が多少ずれたり小さくなったりする。
+// 形そのものが正しければ褒めてあげたいので、書いた文字全体の位置と大きさを
+// お手本に合わせてから採点する(極端な補正はしないよう倍率に上限をつけている)。
+
+const refBoxCache = new Map();
+
+function boundsOf(points) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  points.forEach((p) => {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  });
+  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY,
+    cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+}
+
+function referenceBounds(paths) {
+  const key = paths.join("|");
+  if (!refBoxCache.has(key)) {
+    const pts = [];
+    paths.forEach((d) => {
+      for (let i = 0; i <= 40; i++) pts.push(pointAt(d, i / 40));
+    });
+    refBoxCache.set(key, boundsOf(pts));
+  }
+  return refBoxCache.get(key);
+}
+
+function alignToReference(userStrokes, paths) {
+  const all = userStrokes.flat();
+  if (all.length < 2) return userStrokes;
+  const ub = boundsOf(all);
+  if (ub.w < 8 && ub.h < 8) return userStrokes; // 点のような入力は補正しない
+
+  const rb = referenceBounds(paths);
+  const rawScale = Math.max(rb.w, rb.h) / Math.max(ub.w, ub.h, 1);
+  const scale = Math.min(Math.max(rawScale, 0.7), 1.6);
+
+  return userStrokes.map((stroke) =>
+    stroke.map((p) => ({
+      ...p,
+      x: rb.cx + (p.x - ub.cx) * scale,
+      y: rb.cy + (p.y - ub.cy) * scale
+    }))
+  );
+}
+
 function toPx(pt, size) {
   return { x: (pt.x / GRID) * size, y: (pt.y / GRID) * size };
 }
 
-// お手本文字のマスク(黒地に白でグリフを描画)を作る
-function buildGlyphMask(char, size) {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = "#fff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `${Math.floor(size * 0.82)}px "Hiragino Mincho ProN", "Hiragino Kaku Gothic ProN", sans-serif`;
-  ctx.fillText(char, size / 2, size / 2 + size * 0.03);
-  return ctx.getImageData(0, 0, size, size);
-}
-
-// マスクを指定回数だけ膨張させる(許容誤差を持たせるため)
-function dilate(imageData, size, passes) {
-  let src = imageData.data;
-  for (let p = 0; p < passes; p++) {
-    const dst = new Uint8ClampedArray(src.length);
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const i = (y * size + x) * 4;
-        let on = src[i] > 128;
-        if (!on) {
-          for (let dy = -1; dy <= 1 && !on; dy++) {
-            for (let dx = -1; dx <= 1 && !on; dx++) {
-              const nx = x + dx, ny = y + dy;
-              if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
-              const ni = (ny * size + nx) * 4;
-              if (src[ni] > 128) on = true;
-            }
-          }
-        }
-        const v = on ? 255 : 0;
-        dst[i] = dst[i + 1] = dst[i + 2] = v;
-        dst[i + 3] = 255;
-      }
-    }
-    src = dst;
-  }
-  return src;
-}
-
-// ユーザーの筆跡を白黒ラスターに変換
-function rasterizeUserStrokes(strokes, size) {
+function blankMaskCanvas(size) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -76,6 +83,24 @@ function rasterizeUserStrokes(strokes, size) {
   ctx.strokeStyle = "#fff";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  return { canvas, ctx };
+}
+
+// お手本の線を白で描いたマスク画像を作る
+function buildReferenceMask(paths, size) {
+  const { ctx } = blankMaskCanvas(size);
+  const scale = size / KVG_SIZE;
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.lineWidth = (size * STROKE_WIDTH_RATIO) / scale;
+  paths.forEach((d) => ctx.stroke(path2d(d)));
+  ctx.restore();
+  return ctx.getImageData(0, 0, size, size).data;
+}
+
+// ユーザーの筆跡を白黒ラスターに変換
+function rasterizeUserStrokes(strokes, size) {
+  const { ctx } = blankMaskCanvas(size);
   ctx.lineWidth = size * STROKE_WIDTH_RATIO;
   strokes.forEach((stroke) => {
     if (stroke.length < 2) return;
@@ -91,57 +116,75 @@ function rasterizeUserStrokes(strokes, size) {
   return ctx.getImageData(0, 0, size, size).data;
 }
 
-function formScore(char, userStrokes) {
+// マスクを指定回数だけ膨張させる(許容誤差を持たせるため)
+function dilate(src, size, passes) {
+  for (let p = 0; p < passes; p++) {
+    const dst = new Uint8ClampedArray(src.length);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        let on = src[i] > 128;
+        if (!on) {
+          for (let dy = -1; dy <= 1 && !on; dy++) {
+            for (let dx = -1; dx <= 1 && !on; dx++) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+              if (src[(ny * size + nx) * 4] > 128) on = true;
+            }
+          }
+        }
+        const v = on ? 255 : 0;
+        dst[i] = dst[i + 1] = dst[i + 2] = v;
+        dst[i + 3] = 255;
+      }
+    }
+    src = dst;
+  }
+  return src;
+}
+
+function formScore(paths, userStrokes) {
   const size = RASTER_SIZE;
-  const rawMask = buildGlyphMask(char, size).data;
-  const dilatedMask = dilate({ data: rawMask }, size, DILATE_PASSES);
+  const refMask = buildReferenceMask(paths, size);
+  const dilatedRef = dilate(refMask, size, DILATE_PASSES);
   const userInk = rasterizeUserStrokes(userStrokes, size);
-  const dilatedUserInk = dilate({ data: userInk }, size, DILATE_PASSES);
+  const dilatedUser = dilate(userInk, size, DILATE_PASSES);
 
   let userOn = 0, userOnAndRef = 0, refOn = 0, refOnAndUser = 0;
   for (let i = 0; i < userInk.length; i += 4) {
-    const uOn = userInk[i] > 128;
-    const rOn = rawMask[i] > 128;
-    const uDilOn = dilatedUserInk[i] > 128;
-    const rDilOn = dilatedMask[i] > 128;
-    if (uOn) {
+    if (userInk[i] > 128) {
       userOn++;
-      if (rDilOn) userOnAndRef++; // 描いた場所がお手本の許容範囲内か
+      if (dilatedRef[i] > 128) userOnAndRef++; // 描いた場所がお手本の許容範囲内か
     }
-    if (rOn) {
+    if (refMask[i] > 128) {
       refOn++;
-      if (uDilOn) refOnAndUser++; // お手本の場所がちゃんと埋まっているか
+      if (dilatedUser[i] > 128) refOnAndUser++; // お手本の場所がちゃんと埋まっているか
     }
   }
   const precision = userOn > 0 ? userOnAndRef / userOn : 0; // はみ出していないか
   const recall = refOn > 0 ? refOnAndUser / refOn : 0; // 書き足りない部分がないか
   if (precision + recall === 0) return 0;
-  const f1 = (2 * precision * recall) / (precision + recall);
-  return Math.round(f1 * 100);
+  return Math.round(((2 * precision * recall) / (precision + recall)) * 100);
 }
 
-// 1画ごとの始点・終点を、お手本の各画と比較して
+// 1画ごとの書きはじめ・書きおわりを、お手本の各画と比較して
 // 「順番・向き」が合っているかを判定する
-function strokeOrderCheck(expectedStrokes, userStrokes) {
+function strokeOrderCheck(paths, userStrokes) {
   const mistakes = [];
-  const n = Math.max(expectedStrokes.length, userStrokes.length);
-  const TOLERANCE = 26; // 0-100グリッド上での許容距離
 
-  if (userStrokes.length < expectedStrokes.length) {
+  if (userStrokes.length < paths.length) {
     mistakes.push({ type: "missing", strokeOrder: userStrokes.length + 1,
       message: `${kakume(userStrokes.length + 1)}が たりないよ` });
-  } else if (userStrokes.length > expectedStrokes.length) {
-    mistakes.push({ type: "extra", strokeOrder: expectedStrokes.length + 1,
+  } else if (userStrokes.length > paths.length) {
+    mistakes.push({ type: "extra", strokeOrder: paths.length + 1,
       message: "かくすうが おおいよ" });
   }
 
-  const matchCount = Math.min(expectedStrokes.length, userStrokes.length);
+  const matchCount = Math.min(paths.length, userStrokes.length);
   for (let i = 0; i < matchCount; i++) {
-    const exp = expectedStrokes[i];
     const usr = userStrokes[i];
     if (!usr || usr.length < 2) continue;
-    const expStart = { x: exp[0][0], y: exp[0][1] };
-    const expEnd = { x: exp[exp.length - 1][0], y: exp[exp.length - 1][1] };
+    const { start: expStart, end: expEnd } = startEndOf(paths[i]);
     const usrStart = usr[0];
     const usrEnd = usr[usr.length - 1];
 
@@ -172,18 +215,20 @@ function kakume(n) {
  * @param {"practice"|"test"} mode
  */
 export function judge(charData, userStrokes, mode = "practice") {
-  const orderMistakes = strokeOrderCheck(charData.strokes, userStrokes);
-  const shape = formScore(charData.char, userStrokes);
+  const paths = charData.paths;
+  const aligned = alignToReference(userStrokes, paths);
+  const mistakes = strokeOrderCheck(paths, aligned);
+  const shape = formScore(paths, aligned);
 
-  const orderRatio = 1 - Math.min(orderMistakes.length, charData.strokes.length) / charData.strokes.length;
+  const orderRatio = 1 - Math.min(mistakes.length, paths.length) / paths.length;
   const orderScore = Math.round(orderRatio * 100);
 
   // テストモードは形をやや厳しめに、練習モードは書き順をやや厳しめに重み付け
   const weights = mode === "test" ? { order: 0.35, shape: 0.65 } : { order: 0.5, shape: 0.5 };
   const total = Math.round(orderScore * weights.order + shape * weights.shape);
 
-  if (shape < 55 && !orderMistakes.some((m) => m.type === "shape")) {
-    orderMistakes.push({ type: "shape", strokeOrder: null, message: "かたちを もうすこし なぞってみよう" });
+  if (shape < 55) {
+    mistakes.push({ type: "shape", strokeOrder: null, message: "かたちを もうすこし なぞってみよう" });
   }
 
   let praiseLevel;
@@ -196,7 +241,7 @@ export function judge(charData, userStrokes, mode = "practice") {
     total,
     shapeScore: shape,
     orderScore,
-    mistakes: orderMistakes,
+    mistakes,
     praiseLevel,
     pass: total >= (mode === "test" ? 70 : 60)
   };

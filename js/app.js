@@ -1,6 +1,7 @@
 import { HIRAGANA_DATA } from "./data/hiragana.js";
 import { judge } from "./judge.js";
-import { WritingCanvas, chaikinSmooth } from "./canvas.js";
+import { WritingCanvas } from "./canvas.js";
+import { pointAt } from "./strokePaths.js";
 import { loadProgress, recordResult, getReviewQueue, exportBackup, importBackup } from "./storage.js";
 import { homeScreenHTML, listScreenHTML, writeScreenHTML, resultOverlayHTML, myPageHTML } from "./ui.js";
 import { loadStreak } from "./storage.js";
@@ -219,30 +220,50 @@ function bootFromHash() {
   return false;
 }
 
+// お手本の線をなぞった「理想的な筆跡」を作る(動作確認用)
+function sampleIdealStrokes(charData) {
+  return charData.paths.map((d) => {
+    const pts = [];
+    for (let i = 0; i <= 24; i++) {
+      const p = pointAt(d, i / 24);
+      pts.push({ x: p.x, y: p.y, pressure: 0.5 });
+    }
+    return pts;
+  });
+}
+
 // 判定エンジンの動作確認用(#test=文字ID:good|bad)。通常利用では使わない。
 function debugAutoSubmit(id, quality) {
   const charData = charById(id);
   if (!charData) return;
   startQueue([id], "practice");
   requestAnimationFrame(() => {
-    const base = charData.strokes.map((s) => s.map(([x, y]) => ({ x, y, pressure: 0.5 })));
-    const strokes = quality === "bad" ? [...base].reverse() : base;
+    const base = sampleIdealStrokes(charData);
+    let strokes = base;
+    if (quality === "bad") {
+      strokes = [...base].reverse(); // 書き順を逆にする
+    } else if (quality === "shift") {
+      // 形は正しいが、小さめ・右下寄りに書いた場合(位置ずれ補正の確認用)
+      strokes = base.map((s) => s.map((p) => ({ ...p, x: p.x * 0.75 + 22, y: p.y * 0.75 + 18 })));
+    }
     state.writingCanvas.userStrokes = strokes;
     state.writingCanvas.render();
     setTimeout(() => onSubmit(charData), 80);
   });
 }
 
-// お手本アニメーションの滑らか化の見た目確認用(#preview=文字ID)。通常利用では使わない。
-function debugPreviewSmoothed(id) {
+// お手本の見た目確認用(#preview=文字ID[:描き終えた画数:途中の画の進み具合])。
+// 例) #preview=hiragana_a:1:0.5 → 1画目まで完了し、2画目を半分描いた状態
+function debugPreviewSmoothed(arg) {
+  const [id, doneStr, progressStr] = arg.split(":");
   const charData = charById(id);
   if (!charData) return;
   startQueue([id], "practice");
   requestAnimationFrame(() => {
-    const strokes = charData.strokes.map((s) =>
-      chaikinSmooth(s, 4).map(([x, y]) => ({ x, y, pressure: 0.6 }))
-    );
-    state.writingCanvas.userStrokes = strokes;
+    state.writingCanvas.demoState = {
+      doneCount: doneStr !== undefined ? Number(doneStr) : charData.paths.length,
+      progress: progressStr !== undefined ? Number(progressStr) : 0
+    };
     state.writingCanvas.render();
   });
 }

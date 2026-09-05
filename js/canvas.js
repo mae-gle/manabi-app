@@ -1,7 +1,13 @@
 // 書き込みキャンバス
 // ・ユーザーの筆跡(ポインタ座標)を正規化座標(0-100)で記録
-// ・練習モード用: 薄い文字ガイド、書き順番号、お手本アニメーション
+// ・練習モード用: 薄いお手本、書き順番号、なぞりアニメーション
 // ・Apple Pencilの筆圧にも対応(pointer eventsのpressureを利用)
+//
+// お手本・アニメーションは文字データのSVGパスをそのまま描いているので、
+// 「薄く表示されているお手本」と「アニメーションの動き」は必ず一致する。
+
+import { KVG_SIZE } from "./data/hiragana.js";
+import { path2d, pathLength, pointAt } from "./strokePaths.js";
 
 export class WritingCanvas {
   constructor(canvasEl, { showGuide = true } = {}) {
@@ -12,6 +18,7 @@ export class WritingCanvas {
     this.userStrokes = [];
     this.currentStroke = null;
     this.isDemoPlaying = false;
+    this.demoState = null; // { doneCount, progress }
 
     this._resize();
     window.addEventListener("resize", () => this._resize());
@@ -89,9 +96,30 @@ export class WritingCanvas {
     return { x: (pt.x / 100) * this.size, y: (pt.y / 100) * this.size };
   }
 
+  // 文字データのSVGパスを1画ぶん描く。progressを1未満にすると途中まで描かれる
+  _strokeRefPath(d, { color, width, progress = 1 }) {
+    if (progress <= 0) return;
+    const ctx = this.ctx;
+    const scale = this.size / KVG_SIZE;
+    ctx.save();
+    ctx.scale(scale, scale);
+    ctx.strokeStyle = color;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = width / scale;
+    if (progress < 1) {
+      const len = pathLength(d);
+      ctx.setLineDash([len, len]);
+      ctx.lineDashOffset = len * (1 - progress);
+    }
+    ctx.stroke(path2d(d));
+    ctx.restore();
+  }
+
   render() {
     const ctx = this.ctx;
     const s = this.size;
+    if (!s) return;
     ctx.clearRect(0, 0, s, s);
 
     // 背景
@@ -101,6 +129,7 @@ export class WritingCanvas {
     // マス目(十字の補助線)
     ctx.strokeStyle = "#f0e6d2";
     ctx.lineWidth = 1;
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(s / 2, 0); ctx.lineTo(s / 2, s);
     ctx.moveTo(0, s / 2); ctx.lineTo(s, s / 2);
@@ -108,21 +137,32 @@ export class WritingCanvas {
     ctx.strokeStyle = "#f7f0e0";
     ctx.strokeRect(1, 1, s - 2, s - 2);
 
-    if (this.charData && this.showGuide) {
-      // 薄いお手本文字
-      ctx.save();
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = "#8a7654";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `${s * 0.75}px "Hiragino Mincho ProN", "Hiragino Kaku Gothic ProN", sans-serif`;
-      ctx.fillText(this.charData.char, s / 2, s / 2 + s * 0.02);
-      ctx.restore();
+    const paths = this.charData ? this.charData.paths : [];
 
-      // 書き順番号(各画の開始点)
-      this.charData.strokes.forEach((stroke, i) => {
+    if (this.charData && this.showGuide) {
+      // 薄いお手本(なぞる線)
+      paths.forEach((d) => {
+        this._strokeRefPath(d, { color: "#e7dcc6", width: s * 0.085 });
+      });
+    }
+
+    // なぞりアニメーション(お手本ボタン)
+    if (this.demoState) {
+      const { doneCount, progress } = this.demoState;
+      paths.forEach((d, i) => {
+        if (i < doneCount) {
+          this._strokeRefPath(d, { color: "#ffb35c", width: s * 0.075 });
+        } else if (i === doneCount && progress > 0) {
+          this._strokeRefPath(d, { color: "#ff9f5a", width: s * 0.075, progress });
+        }
+      });
+    }
+
+    // 書き順番号(各画の書きはじめ)
+    if (this.charData && this.showGuide) {
+      paths.forEach((d, i) => {
         const done = i < this.userStrokes.length;
-        const p = this._px({ x: stroke[0][0], y: stroke[0][1] });
+        const p = this._px(pointAt(d, 0));
         ctx.beginPath();
         ctx.arc(p.x, p.y, s * 0.045, 0, Math.PI * 2);
         ctx.fillStyle = done ? "#c9e4c5" : "#ffb35c";
@@ -146,6 +186,7 @@ export class WritingCanvas {
   _drawStroke(stroke) {
     if (stroke.length < 2) return;
     const ctx = this.ctx;
+    ctx.setLineDash([]);
     ctx.beginPath();
     const p0 = this._px(stroke[0]);
     ctx.moveTo(p0.x, p0.y);
@@ -160,64 +201,36 @@ export class WritingCanvas {
     }
   }
 
-  // お手本アニメーション再生(練習モードの「お手本を見る」ボタン用)
+  // お手本アニメーション再生(1画ずつ、実際の書き順の線をなぞって見せる)
   async playDemo() {
     if (!this.charData || this.isDemoPlaying) return;
     this.isDemoPlaying = true;
-    const savedStrokes = this.userStrokes;
-    this.userStrokes = [];
-    this._demoDoneStrokes = [];
+    const paths = this.charData.paths;
 
-    for (const stroke of this.charData.strokes) {
-      const smoothPath = chaikinSmooth(stroke, 4); // カクカクした折れ線を滑らかな曲線に変換
-      const steps = 32;
-      const animated = [];
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const pt = interpolatePolyline(smoothPath, t);
-        animated.push({ x: pt.x, y: pt.y, pressure: 0.6 });
-        this.userStrokes = [...this._demoDoneStrokes, animated];
-        this.render();
-        await sleep(16);
-      }
-      this._demoDoneStrokes = [...(this._demoDoneStrokes || []), animated];
-      await sleep(180);
+    for (let i = 0; i < paths.length; i++) {
+      const len = pathLength(paths[i]);
+      const duration = Math.max(600, Math.min(1800, len * 14)); // 長い画ほどゆっくり
+      const startTime = performance.now();
+      await new Promise((resolve) => {
+        const step = (now) => {
+          const t = Math.min(1, (now - startTime) / duration);
+          this.demoState = { doneCount: i, progress: t };
+          this.render();
+          if (t < 1) requestAnimationFrame(step);
+          else resolve();
+        };
+        requestAnimationFrame(step);
+      });
+      this.demoState = { doneCount: i + 1, progress: 0 };
+      this.render();
+      await sleep(280); // 次の画に移る前に少し止める
     }
-    await sleep(300);
-    this._demoDoneStrokes = [];
-    this.userStrokes = savedStrokes;
+
+    await sleep(700);
+    this.demoState = null;
     this.isDemoPlaying = false;
     this.render();
   }
-}
-
-// Chaikinのコーナーカット法で折れ線の角を丸める。
-// 端点(始点・終点)は動かさないので、書き順判定に使う始点・終点はそのまま保たれる。
-export function chaikinSmooth(points, iterations = 3) {
-  if (points.length < 3) return points;
-  let pts = points.map((p) => [...p]);
-  for (let iter = 0; iter < iterations; iter++) {
-    const next = [pts[0]];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const [x0, y0] = pts[i];
-      const [x1, y1] = pts[i + 1];
-      next.push([x0 + (x1 - x0) * 0.25, y0 + (y1 - y0) * 0.25]);
-      next.push([x0 + (x1 - x0) * 0.75, y0 + (y1 - y0) * 0.75]);
-    }
-    next.push(pts[pts.length - 1]);
-    pts = next;
-  }
-  return pts;
-}
-
-function interpolatePolyline(points, t) {
-  const segCount = points.length - 1;
-  const segLen = 1 / segCount;
-  let segIdx = Math.min(Math.floor(t / segLen), segCount - 1);
-  const localT = (t - segIdx * segLen) / segLen;
-  const [x1, y1] = points[segIdx];
-  const [x2, y2] = points[segIdx + 1];
-  return { x: x1 + (x2 - x1) * localT, y: y1 + (y2 - y1) * localT };
 }
 
 function sleep(ms) {
