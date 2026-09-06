@@ -2,6 +2,8 @@
 // iOSのSafariはまれに未使用のWebデータを消去することがあるため、
 // エクスポート/インポートでファイルへのバックアップができるようにしている。
 
+import { STICKER_ALBUMS, findSticker } from "./data/stickers.js";
+
 const PROGRESS_KEY = "manabi_progress_v1";
 const STREAK_KEY = "manabi_streak_v1";
 
@@ -12,11 +14,15 @@ export const DAILY_GOAL = 5;
 export const WEAK_SCORE_THRESHOLD = 70;
 const RECENT_COUNT = 3;
 
-// あつめられるシール(ごほうび)。じょうず以上でひとつずつ手に入る。
-export const STICKERS = [
-  "🐶","🐱","🐰","🐻","🐼","🦁","🐯","🐸","🐵","🦊",
-  "🚗","🚕","🚌","🚑","🚒","🚜","🚂","✈️","🚀","⛵",
-  "🍎","🍓","🍇","🍉","🍌","🍰","🍩","🍦","🍪","🍭"
+// シールは「がんばりポイント」をためると1枚もらえる。
+// 良い出来ほど早くたまるので、ていねいに書くほど早くシールが増える。
+export const STICKER_COST = 6;
+const POINTS_BY_PRAISE = { perfect: 3, good: 2, ok: 1, retry: 0 };
+
+// レア度の出やすさ(この順に抽選する)
+const RARITY_ROLL = [
+  { rarity: "super", chance: 0.05 },
+  { rarity: "rare", chance: 0.2 }
 ];
 
 function todayStr() {
@@ -41,7 +47,8 @@ function defaultStats() {
     currentStreak: 0,
     longestStreak: 0,
     historyDates: [],
-    stickers: [],            // 手に入れたシール(絵文字)
+    stickers: [],              // 手に入れたシールのid
+    stickerPoints: 0,          // 次のシールまでのがんばりポイント
     today: { date: null, charIds: [] } // きょう練習した文字
   };
 }
@@ -58,7 +65,11 @@ export function loadStats() {
   if (!stats.today || stats.today.date !== todayStr()) {
     stats.today = { date: todayStr(), charIds: [] };
   }
-  if (!Array.isArray(stats.stickers)) stats.stickers = [];
+  // 以前のバージョンは絵文字そのものを保存していたため、idのものだけ残す
+  stats.stickers = Array.isArray(stats.stickers)
+    ? stats.stickers.filter((id) => findSticker(id))
+    : [];
+  if (typeof stats.stickerPoints !== "number") stats.stickerPoints = 0;
   return stats;
 }
 
@@ -73,12 +84,65 @@ export function getTodayStatus() {
   return { count, goal: DAILY_GOAL, achieved: count >= DAILY_GOAL };
 }
 
+/** シールずかんの状態(マイページ表示用) */
+export function getStickerState() {
+  const stats = loadStats();
+  const owned = new Set(stats.stickers);
+  const albums = STICKER_ALBUMS.map((album) => {
+    const ownedCount = album.stickers.filter((s) => owned.has(s.id)).length;
+    return {
+      id: album.id,
+      name: album.name,
+      cover: album.cover,
+      ownedCount,
+      complete: ownedCount === album.stickers.length,
+      stickers: album.stickers.map((s) => ({ ...s, owned: owned.has(s.id) }))
+    };
+  });
+  const total = albums.reduce((n, a) => n + a.stickers.length, 0);
+  const ownedTotal = albums.reduce((n, a) => n + a.ownedCount, 0);
+  return {
+    albums,
+    total,
+    ownedTotal,
+    points: stats.stickerPoints,
+    cost: STICKER_COST,
+    allComplete: ownedTotal === total
+  };
+}
+
 /** 直近の点数の平均(にがて判定に使う)。まだ練習していない文字は null */
 function recentAverage(entry) {
   if (!entry || entry.attempts.length === 0) return null;
   const recent = entry.attempts.slice(-RECENT_COUNT);
   const sum = recent.reduce((acc, a) => acc + a.score, 0);
   return Math.round(sum / recent.length);
+}
+
+// いま集めているアルバム(そろっていない最初のアルバム)から1枚選ぶ
+function drawSticker(ownedIds) {
+  const owned = new Set(ownedIds);
+  const album = STICKER_ALBUMS.find((a) => a.stickers.some((s) => !owned.has(s.id)));
+  if (!album) return null; // ぜんぶ集めた
+
+  const remaining = album.stickers.filter((s) => !owned.has(s.id));
+  const roll = Math.random();
+  let acc = 0;
+  for (const { rarity, chance } of RARITY_ROLL) {
+    acc += chance;
+    if (roll < acc) {
+      const candidates = remaining.filter((s) => s.rarity === rarity);
+      if (candidates.length > 0) {
+        const picked = candidates[Math.floor(Math.random() * candidates.length)];
+        return { ...picked, albumId: album.id, albumName: album.name };
+      }
+      break; // そのレア度が残っていなければノーマルから選ぶ
+    }
+  }
+  const normals = remaining.filter((s) => s.rarity === "normal");
+  const pool = normals.length > 0 ? normals : remaining;
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+  return { ...picked, albumId: album.id, albumName: album.name };
 }
 
 // 1回の練習/テスト結果を記録し、習熟度・記録・シールを更新する
@@ -115,18 +179,33 @@ export function recordResult(charId, mode, result) {
   }
   if (!stats.today.charIds.includes(charId)) stats.today.charIds.push(charId);
 
-  // ごほうびシール: じょうず以上で、まだ持っていないシールを1枚もらえる
+  // がんばりポイントをためて、たまったらシールを1枚もらえる
+  stats.stickerPoints += POINTS_BY_PRAISE[result.praiseLevel] || 0;
   let newSticker = null;
-  if (result.praiseLevel === "perfect" || result.praiseLevel === "good") {
-    const remaining = STICKERS.filter((s) => !stats.stickers.includes(s));
-    if (remaining.length > 0) {
-      newSticker = remaining[Math.floor(Math.random() * remaining.length)];
-      stats.stickers.push(newSticker);
+  let albumCompleted = null;
+  if (stats.stickerPoints >= STICKER_COST) {
+    const drawn = drawSticker(stats.stickers);
+    if (drawn) {
+      stats.stickerPoints -= STICKER_COST;
+      stats.stickers.push(drawn.id);
+      newSticker = drawn;
+      const album = STICKER_ALBUMS.find((a) => a.id === drawn.albumId);
+      if (album && album.stickers.every((s) => stats.stickers.includes(s.id))) {
+        albumCompleted = album.name;
+      }
+    } else {
+      stats.stickerPoints = STICKER_COST; // ぜんぶ集めたらそれ以上たまらない
     }
   }
   saveStats(stats);
 
-  return { progress: entry, stats, newSticker };
+  return {
+    progress: entry,
+    stats,
+    newSticker,
+    albumCompleted,
+    pointsToNext: Math.max(0, STICKER_COST - stats.stickerPoints)
+  };
 }
 
 /**

@@ -6,7 +6,7 @@
 // 基準マスクとして使う。見えているお手本＝採点の基準なので、
 // 「ちゃんとなぞったのに減点される」ということが起きない。
 
-import { KVG_SIZE } from "./data/hiragana.js";
+import { KVG_SIZE } from "./data/kvg.js";
 import { path2d, startEndOf, pointAt } from "./strokePaths.js";
 
 const GRID = 100; // 正規化座標の一辺

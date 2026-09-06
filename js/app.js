@@ -1,16 +1,17 @@
-import { HIRAGANA_DATA } from "./data/hiragana.js";
 import { judge } from "./judge.js";
 import { WritingCanvas } from "./canvas.js";
 import { pointAt } from "./strokePaths.js";
+import { SUBJECTS, COMING_SOON, ALL_CHARS, getSubject, charById } from "./subjects.js";
 import {
   loadProgress, loadStats, recordResult, getReviewQueue, getWeakChars,
-  getTodayStatus, exportBackup, importBackup, STICKERS, WEAK_SCORE_THRESHOLD
+  getTodayStatus, getStickerState, exportBackup, importBackup, WEAK_SCORE_THRESHOLD
 } from "./storage.js";
 import { homeScreenHTML, listScreenHTML, writeScreenHTML, resultOverlayHTML, myPageHTML } from "./ui.js";
 
 const root = document.getElementById("app");
 
 const state = {
+  subjectId: "hiragana",
   mode: "practice", // "practice" | "test"
   queue: [],
   queueIndex: 0,
@@ -18,29 +19,24 @@ const state = {
   lastScreen: "home"
 };
 
-function charById(id) {
-  return HIRAGANA_DATA.find((c) => c.id === id);
-}
-
 // ---- 画面遷移 ----
 
 function goHome() {
   state.lastScreen = "home";
-  root.innerHTML = homeScreenHTML(getTodayStatus());
+  root.innerHTML = homeScreenHTML(getTodayStatus(), SUBJECTS, COMING_SOON);
   wireHome();
 }
 
 function goList() {
   state.lastScreen = "list";
-  const progress = loadProgress();
-  root.innerHTML = listScreenHTML(HIRAGANA_DATA, progress, state.mode);
+  root.innerHTML = listScreenHTML(getSubject(state.subjectId), loadProgress(), state.mode);
   wireList();
 }
 
 function goMyPage() {
   state.lastScreen = "mypage";
-  const weak = getWeakChars(HIRAGANA_DATA).slice(0, 12);
-  root.innerHTML = myPageHTML(loadStats(), weak, STICKERS, WEAK_SCORE_THRESHOLD);
+  const weak = getWeakChars(ALL_CHARS).slice(0, 12);
+  root.innerHTML = myPageHTML(loadStats(), weak, getStickerState(), WEAK_SCORE_THRESHOLD);
   wireMyPage();
 }
 
@@ -52,8 +48,7 @@ function startQueue(ids, mode) {
 }
 
 function openWriteScreen() {
-  const id = state.queue[state.queueIndex];
-  const charData = charById(id);
+  const charData = charById(state.queue[state.queueIndex]);
   root.innerHTML = writeScreenHTML(charData, state.mode, state.queueIndex, state.queue.length);
   const canvasEl = document.getElementById("writing-canvas");
   state.writingCanvas = new WritingCanvas(canvasEl, { showGuide: state.mode === "practice" });
@@ -65,9 +60,15 @@ function openWriteScreen() {
 
 function wireHome() {
   root.querySelector('[data-nav="mypage"]').addEventListener("click", goMyPage);
-  root.querySelector('[data-subject="hiragana"]').addEventListener("click", goList);
+  root.querySelectorAll("[data-subject]").forEach((card) => {
+    card.addEventListener("click", () => {
+      state.subjectId = card.dataset.subject;
+      goList();
+    });
+  });
   root.querySelector('[data-nav="review"]').addEventListener("click", () => {
-    const queue = getReviewQueue(HIRAGANA_DATA).slice(0, 10).map((c) => c.id);
+    // ふくしゅうは教科をまたいで、にがてな文字から出題する
+    const queue = getReviewQueue(ALL_CHARS).slice(0, 10).map((c) => c.id);
     startQueue(queue, "test");
   });
 }
@@ -81,9 +82,7 @@ function wireList() {
     });
   });
   root.querySelectorAll(".char-tile").forEach((tile) => {
-    tile.addEventListener("click", () => {
-      startQueue([tile.dataset.char], state.mode);
-    });
+    tile.addEventListener("click", () => startQueue([tile.dataset.char], state.mode));
   });
 }
 
@@ -91,7 +90,7 @@ function wireWrite(charData) {
   root.querySelector('[data-nav="back"]').addEventListener("click", () => {
     state.lastScreen === "home" ? goHome() : goList();
   });
-  root.querySelector('[data-action="speak"]').addEventListener("click", () => speak(charData.romaji, charData.char));
+  root.querySelector('[data-action="speak"]').addEventListener("click", () => speak(charData.char));
   root.querySelector('[data-action="undo"]').addEventListener("click", () => state.writingCanvas.undoLastStroke());
   root.querySelector('[data-action="clear"]').addEventListener("click", () => state.writingCanvas.clear());
   const demoBtn = root.querySelector('[data-action="demo"]');
@@ -103,13 +102,13 @@ function onSubmit(charData) {
   const strokes = state.writingCanvas.getStrokes();
   if (strokes.length === 0) return;
   const result = judge(charData, strokes, state.mode);
-  const { newSticker } = recordResult(charData.id, state.mode, result);
-  showResult(result, charData, newSticker);
+  const reward = recordResult(charData.id, state.mode, result);
+  showResult(result, charData, reward);
 }
 
-function showResult(result, charData, newSticker) {
+function showResult(result, charData, reward) {
   const overlay = document.createElement("div");
-  overlay.innerHTML = resultOverlayHTML(result, charData, state.mode, newSticker);
+  overlay.innerHTML = resultOverlayHTML(result, charData, state.mode, reward);
   const node = overlay.firstElementChild;
   document.body.appendChild(node);
 
@@ -149,7 +148,7 @@ function wireMyPage() {
 
 // ---- 読み上げ(TTS) ----
 
-function speak(romaji, char) {
+function speak(char) {
   if (!("speechSynthesis" in window)) return;
   const utter = new SpeechSynthesisUtterance(char);
   utter.lang = "ja-JP";
@@ -207,17 +206,11 @@ function launchConfetti(container) {
 }
 
 // ---- 起動 ----
-// URLの#list, #write=文字ID:practice|test で直接その画面を開ける
-// (動作確認用。通常の利用では使わない)
-function bootFromHash() {
-  const hash = location.hash.replace("#", "");
-  if (hash === "list") { goList(); return true; }
-  if (hash === "mypage") { goMyPage(); return true; }
-  if (hash.startsWith("write=")) {
-    const [id, mode] = hash.replace("write=", "").split(":");
-    if (charById(id)) { startQueue([id], mode === "test" ? "test" : "practice"); return true; }
-  }
-  return false;
+// URLの#で画面や状態を直接開ける(動作確認用。通常の利用では使わない)
+
+function subjectOfChar(id) {
+  const found = SUBJECTS.find((s) => s.data.some((c) => c.id === id));
+  return found ? found.id : "hiragana";
 }
 
 // お手本の線をなぞった「理想的な筆跡」を作る(動作確認用)
@@ -232,10 +225,11 @@ function sampleIdealStrokes(charData) {
   });
 }
 
-// 判定エンジンの動作確認用(#test=文字ID:good|bad)。通常利用では使わない。
+// 判定エンジンの動作確認用(#test=文字ID:good|bad|shift)
 function debugAutoSubmit(id, quality) {
   const charData = charById(id);
   if (!charData) return;
+  state.subjectId = subjectOfChar(id);
   startQueue([id], "practice");
   requestAnimationFrame(() => {
     const base = sampleIdealStrokes(charData);
@@ -252,12 +246,12 @@ function debugAutoSubmit(id, quality) {
   });
 }
 
-// お手本の見た目確認用(#preview=文字ID[:描き終えた画数:途中の画の進み具合])。
-// 例) #preview=hiragana_a:1:0.5 → 1画目まで完了し、2画目を半分描いた状態
-function debugPreviewSmoothed(arg) {
+// お手本の見た目確認用(#preview=文字ID[:描き終えた画数:途中の画の進み具合])
+function debugPreview(arg) {
   const [id, doneStr, progressStr] = arg.split(":");
   const charData = charById(id);
   if (!charData) return;
+  state.subjectId = subjectOfChar(id);
   startQueue([id], "practice");
   requestAnimationFrame(() => {
     state.writingCanvas.demoState = {
@@ -268,21 +262,32 @@ function debugPreviewSmoothed(arg) {
   });
 }
 
-function bootFromHashOrTest() {
+function bootFromHash() {
   const hash = location.hash.replace("#", "");
-  if (hash.startsWith("preview=")) {
-    debugPreviewSmoothed(hash.replace("preview=", ""));
+  if (hash === "mypage") { goMyPage(); return true; }
+  if (hash === "list" || hash.startsWith("list=")) {
+    if (hash.startsWith("list=")) state.subjectId = hash.replace("list=", "");
+    goList();
     return true;
   }
+  if (hash.startsWith("preview=")) { debugPreview(hash.replace("preview=", "")); return true; }
   if (hash.startsWith("test=")) {
     const [id, quality] = hash.replace("test=", "").split(":");
     debugAutoSubmit(id, quality);
     return true;
   }
-  return bootFromHash();
+  if (hash.startsWith("write=")) {
+    const [id, mode] = hash.replace("write=", "").split(":");
+    if (charById(id)) {
+      state.subjectId = subjectOfChar(id);
+      startQueue([id], mode === "test" ? "test" : "practice");
+      return true;
+    }
+  }
+  return false;
 }
 
-if (!bootFromHashOrTest()) goHome();
+if (!bootFromHash()) goHome();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

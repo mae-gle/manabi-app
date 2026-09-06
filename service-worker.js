@@ -2,7 +2,7 @@
 // アプリを更新した際は CACHE_VERSION の数字を上げてください
 // (上げないと端末に古いキャッシュが残ってしまいます)
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_NAME = `manabi-app-${CACHE_VERSION}`;
 
 const APP_SHELL = [
@@ -15,6 +15,10 @@ const APP_SHELL = [
   "./js/canvas.js",
   "./js/judge.js",
   "./js/strokePaths.js",
+  "./js/subjects.js",
+  "./js/data/kvg.js",
+  "./js/data/katakana.js",
+  "./js/data/stickers.js",
   "./js/storage.js",
   "./js/data/hiragana.js",
   "./icons/icon-180.png",

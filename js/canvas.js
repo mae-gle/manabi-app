@@ -6,7 +6,7 @@
 // お手本・アニメーションは文字データのSVGパスをそのまま描いているので、
 // 「薄く表示されているお手本」と「アニメーションの動き」は必ず一致する。
 
-import { KVG_SIZE } from "./data/hiragana.js";
+import { KVG_SIZE } from "./data/kvg.js";
 import { path2d, pathLength, pointAt } from "./strokePaths.js";
 
 // お手本の線・なぞりアニメーション・自分で書く線は、すべて同じ太さにそろえる

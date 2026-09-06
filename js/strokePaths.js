@@ -4,7 +4,7 @@
 // 「画面のお手本」「なぞりアニメーション」「採点」がすべてこの同じパスを使うため、
 // 見た目と判定が食い違うことがない。
 
-import { KVG_SIZE } from "./data/hiragana.js";
+import { KVG_SIZE } from "./data/kvg.js";
 
 const path2dCache = new Map();
 const svgPathCache = new Map();

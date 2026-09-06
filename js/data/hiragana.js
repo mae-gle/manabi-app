@@ -7,14 +7,12 @@
 //   https://creativecommons.org/licenses/by-sa/3.0/
 //
 // paths: 1画=1つのSVGパス文字列。配列の順序がそのまま書き順になる。
-//        座標系は KanjiVG の 109x109 (KVG_SIZE)。
+//        座標系は data/kvg.js の KVG_SIZE (109x109)。
 //        画面表示・お手本アニメーション・採点のすべてでこの同じ線を使うため、
 //        お手本とお手本アニメーションが必ず一致する。
 // row/col: 五十音表での位置(一覧画面をこの並びで表示する)
 //
-// カタカナ・漢字も同じ形式で追加できる(tools/fetch_kanjivg.py で生成)。
-
-export const KVG_SIZE = 109;
+// このファイルは tools/fetch_kanjivg.py で生成しています(手で編集しない)。
 
 export const HIRAGANA_DATA = [
   { id: "hiragana_a", char: "あ", romaji: "a", row: "あ", col: 0,
@@ -261,5 +259,6 @@ export const HIRAGANA_DATA = [
     ]},
 ];
 
-// 五十音表の行の表示順(一覧画面をこの順で並べる)
+// 五十音表の行・列の並び(一覧画面の表示に使う)
 export const ROW_ORDER = ["あ","か","さ","た","な","は","ま","や","ら","わ","ん"];
+export const COL_LABELS = ["あ","い","う","え","お"];

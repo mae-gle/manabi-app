@@ -1,15 +1,28 @@
 // 画面テンプレート(HTML文字列)をまとめたモジュール。
 // ロジック(状態管理・イベント配線)は app.js が担当する。
 
-import { ROW_ORDER } from "./data/hiragana.js";
+import { RARITY_LABEL } from "./data/stickers.js";
 
-const COL_LABELS = ["あ", "い", "う", "え", "お"];
-
-export function homeScreenHTML(today) {
+export function homeScreenHTML(today, subjects, comingSoon) {
   // 「あと何文字で今日の目標か」を、数を数えられる1年生にも分かる丸で表示する
   const dots = Array.from({ length: today.goal }, (_, i) =>
     `<span class="goal-dot ${i < today.count ? "filled" : ""}">${i < today.count ? "⭐" : ""}</span>`
   ).join("");
+
+  const subjectCards = subjects.map((s) => `
+    <button class="subject-card active" data-subject="${s.id}">
+      <span class="subject-emoji">${s.icon}</span>
+      <span class="subject-name">${s.name}</span>
+    </button>
+  `).join("");
+
+  const soonCards = comingSoon.map((s) => `
+    <button class="subject-card disabled" disabled>
+      <span class="subject-emoji">${s.icon}</span>
+      <span class="subject-name">${s.name}</span>
+      <span class="soon-badge">じゅんび中</span>
+    </button>
+  `).join("");
 
   return `
   <header class="topbar">
@@ -25,38 +38,21 @@ export function homeScreenHTML(today) {
     </div>
   </section>
   <section class="subject-grid">
-    <button class="subject-card active" data-subject="hiragana">
-      <span class="subject-emoji">あ</span>
-      <span class="subject-name">ひらがな</span>
-    </button>
-    <button class="subject-card disabled" disabled>
-      <span class="subject-emoji">ア</span>
-      <span class="subject-name">カタカナ</span>
-      <span class="soon-badge">じゅんび中</span>
-    </button>
-    <button class="subject-card disabled" disabled>
-      <span class="subject-emoji">漢</span>
-      <span class="subject-name">かんじ</span>
-      <span class="soon-badge">じゅんび中</span>
-    </button>
-    <button class="subject-card disabled" disabled>
-      <span class="subject-emoji">A</span>
-      <span class="subject-name">えいご</span>
-      <span class="soon-badge">じゅんび中</span>
-    </button>
+    ${subjectCards}
+    ${soonCards}
   </section>
   <button class="review-cta" data-nav="review">📝 きょうのふくしゅうをする</button>
   `;
 }
 
-export function listScreenHTML(chars, progressMap, mode) {
+export function listScreenHTML(subject, progressMap, mode) {
   // 五十音表と同じ並び(5列×行)でグリッドを作る。文字が存在しないマスは空セルにする。
   const byPos = {};
-  chars.forEach((c) => { byPos[`${c.row}_${c.col}`] = c; });
+  subject.data.forEach((c) => { byPos[`${c.row}_${c.col}`] = c; });
 
-  const headerCells = COL_LABELS.map((v) => `<div class="col-label">${v}</div>`).join("");
+  const headerCells = subject.colLabels.map((v) => `<div class="col-label">${v}</div>`).join("");
 
-  const bodyCells = ROW_ORDER.map((row) => {
+  const bodyCells = subject.rowOrder.map((row) => {
     let cells = "";
     for (let col = 0; col < 5; col++) {
       const c = byPos[`${row}_${col}`];
@@ -68,7 +64,7 @@ export function listScreenHTML(chars, progressMap, mode) {
   return `
   <header class="topbar">
     <button class="icon-btn" data-nav="home" aria-label="もどる">←</button>
-    <h1>ひらがな</h1>
+    <h1>${subject.name}</h1>
     <span></span>
   </header>
   <div class="mode-toggle">
@@ -117,7 +113,7 @@ export function writeScreenHTML(charData, mode, index, total) {
   `;
 }
 
-export function resultOverlayHTML(result, charData, mode, newSticker) {
+export function resultOverlayHTML(result, charData, mode, reward) {
   const praiseText = {
     perfect: "パーフェクト！すごいね！",
     good: "じょうずにかけたね！",
@@ -131,6 +127,25 @@ export function resultOverlayHTML(result, charData, mode, newSticker) {
     ? `<p class="no-mistake">まちがいなし！</p>`
     : `<ul class="mistake-list">${result.mistakes.map((m) => `<li>✏️ ${m.message}</li>`).join("")}</ul>`;
 
+  // シールがもらえたとき / もらえるまであと何ポイントか
+  let rewardHTML = "";
+  if (reward.newSticker) {
+    const s = reward.newSticker;
+    rewardHTML = `
+      <div class="sticker-reward ${s.rarity}">
+        <div class="rarity-tag">${RARITY_LABEL[s.rarity]}</div>
+        <div class="sticker-reward-emoji">${s.emoji}</div>
+        <div class="sticker-reward-name">${s.name}</div>
+        <div class="sticker-reward-text">「${s.albumName}」の シールを ゲット！</div>
+      </div>`;
+  } else if (reward.pointsToNext > 0) {
+    rewardHTML = `<div class="sticker-progress">つぎのシールまで あと ${reward.pointsToNext}ポイント</div>`;
+  }
+
+  const albumHTML = reward.albumCompleted
+    ? `<div class="album-complete">🎉 「${reward.albumCompleted}」ずかん コンプリート！</div>`
+    : "";
+
   return `
   <div class="result-overlay ${result.praiseLevel}">
     <div class="result-card">
@@ -138,10 +153,8 @@ export function resultOverlayHTML(result, charData, mode, newSticker) {
       <h2>${praiseText}</h2>
       <div class="score-display">${result.total}<span>てん</span></div>
       <div class="score-sub">かたち ${result.shapeScore}点 ・ じゅんばん ${result.orderScore}点</div>
-      ${newSticker ? `<div class="sticker-reward">
-        <div class="sticker-reward-emoji">${newSticker}</div>
-        <div class="sticker-reward-text">あたらしい シールを ゲット！</div>
-      </div>` : ""}
+      ${rewardHTML}
+      ${albumHTML}
       ${mistakesHTML}
       <div class="result-actions">
         <button class="tool-btn" data-action="retry">🔁 もういちど</button>
@@ -153,13 +166,24 @@ export function resultOverlayHTML(result, charData, mode, newSticker) {
   `;
 }
 
-export function myPageHTML(stats, weakChars, allStickers, weakThreshold) {
-  const owned = new Set(stats.stickers);
-  const stickerHTML = allStickers
-    .map((s) => owned.has(s)
-      ? `<span class="sticker got">${s}</span>`
-      : `<span class="sticker">?</span>`)
-    .join("");
+export function myPageHTML(stats, weakChars, stickerState, weakThreshold) {
+  const albumsHTML = stickerState.albums.map((album) => `
+    <div class="album ${album.complete ? "complete" : ""}">
+      <div class="album-head">
+        <span class="album-name">${album.cover} ${album.name}</span>
+        <span class="count-badge">${album.ownedCount} / ${album.stickers.length}${album.complete ? " ✨" : ""}</span>
+      </div>
+      <div class="sticker-book">
+        ${album.stickers.map((s) => s.owned
+          ? `<span class="sticker got ${s.rarity}" title="${s.name}">
+               <span class="sticker-emoji">${s.emoji}</span>
+               <span class="sticker-name">${s.name}</span>
+             </span>`
+          : `<span class="sticker ${s.rarity === "super" ? "hint-super" : ""}">?</span>`
+        ).join("")}
+      </div>
+    </div>
+  `).join("");
 
   const weakHTML = weakChars.length
     ? weakChars.map(({ char, avg }) =>
@@ -173,9 +197,11 @@ export function myPageHTML(stats, weakChars, allStickers, weakThreshold) {
     <span></span>
   </header>
   <section class="mypage-section">
-    <h3>シールずかん <span class="count-badge">${owned.size} / ${allStickers.length}</span></h3>
-    <p class="muted">「じょうず」いじょうで かけたら、あたらしいシールが 1まい もらえるよ</p>
-    <div class="sticker-book">${stickerHTML}</div>
+    <h3>シールずかん <span class="count-badge">${stickerState.ownedTotal} / ${stickerState.total}</span></h3>
+    <p class="muted">${stickerState.allComplete
+      ? "ぜんぶ あつめたね！ すごい！"
+      : `じょうずに かけると ポイントが たまって、${stickerState.cost}ポイントで シールが 1まい もらえるよ（いまは あと ${stickerState.cost - stickerState.points}ポイント）`}</p>
+    <div class="albums">${albumsHTML}</div>
   </section>
   <section class="mypage-section">
     <h3>にがてな文字</h3>
